@@ -5,6 +5,7 @@ import (
 	"audit-system/ent/auditlog"
 	"audit-system/internal/model"
 	"context"
+	"time"
 )
 
 type AuditLogRepository struct {
@@ -65,4 +66,12 @@ func (r *AuditLogRepository) GetAuditLogsByEmail(ctx context.Context, email stri
 		})
 	}
 	return result, nil
+}
+func (r *AuditLogRepository) DeleteOldAuditLogs(ctx context.Context, ttl time.Duration) error {
+	cutoff := time.Now().Add(-ttl)
+	_, err := r.client.AuditLog.
+		Delete().
+		Where(auditlog.TimestampLTE(cutoff)).
+		Exec(ctx)
+	return err
 }

@@ -17,18 +17,20 @@ func NewAccountRepository(client *ent.Client) *AccountRepository {
 }
 
 func (r *AccountRepository) CreateAccount(ctx context.Context, account model.Account, userEmail string) error {
-	userEntity, err := r.client.User.Query().Where(user.EmailEQ(userEmail)).Only(ctx)
-	if err != nil {
-		return err
-	}
+	return withTx(r.client, ctx, func(tx *ent.Tx) error {
+		userEntity, err := tx.User.Query().Where(user.EmailEQ(userEmail)).Only(ctx)
+		if err != nil {
+			return err
+		}
 
-	_, err = r.client.Account.
-		Create().
-		SetBalance(account.Balance).
-		SetLastTransferTime(account.LastTransferTime).
-		SetUser(userEntity).
-		Save(ctx)
-	return err
+		_, err = tx.Account.
+			Create().
+			SetBalance(account.Balance).
+			SetLastTransferTime(account.LastTransferTime).
+			SetUser(userEntity).
+			Save(ctx)
+		return err
+	})
 }
 
 func (r *AccountRepository) GetAccountsByEmail(ctx context.Context, email string) ([]model.Account, error) {
@@ -83,14 +85,21 @@ func (r *AccountRepository) GetAccountWithTransactions(ctx context.Context, emai
 }
 
 func (r *AccountRepository) UpdateAccount(ctx context.Context, email string, accountID int, updatedAccount model.Account) error {
-	_, err := r.client.User.Query().Where(user.EmailEQ(email)).Only(ctx)
-	if err != nil {
+	return withTx(r.client, ctx, func(tx *ent.Tx) error {
+		_, err := tx.User.Query().Where(user.EmailEQ(email)).Only(ctx)
+		if err != nil {
+			return err
+		}
+		acc, err := tx.Account.Get(ctx, accountID)
+		if err != nil {
+			return err
+		}
+
+		_, err = tx.Account.UpdateOne(acc).
+			SetBalance(updatedAccount.Balance).
+			Save(ctx)
 		return err
-	}
-	_, err = r.client.Account.UpdateOneID(accountID).
-		SetBalance(updatedAccount.Balance).
-		Save(ctx)
-	return err
+	})
 }
 
 func mapAccounts(accounts []*ent.Account) []model.Account {

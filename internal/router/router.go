@@ -9,24 +9,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(r *gin.Engine) {
-
+func SetupRoutes(r *gin.Engine, auditLogRepo *repository.AuditLogRepository) {
+	// Initialize Repositories
 	userRepository := repository.NewUserRepository(database.Client)
-	userService := service.NewUserService(userRepository)
-	handler.InitUserHandler(userService)
-
 	accountRepository := repository.NewAccountRepository(database.Client)
-	accountService := service.NewAccountService(accountRepository)
-	handler.InitAccountHandler(accountService)
-
 	transactionRepository := repository.NewTransactionRepository(database.Client)
-	transactionService := service.NewTransactionService(transactionRepository)
-	handler.InitTransactionHandler(transactionService)
 
-	auditLogRepository := repository.NewAuditLogRepository(database.Client)
-	auditLogService := service.NewAuditLogService(auditLogRepository)
+	// Initialize Services
+	userService := service.NewUserService(userRepository)
+	accountService := service.NewAccountService(accountRepository)
+	transactionService := service.NewTransactionService(transactionRepository)
+	auditLogService := service.NewAuditLogService(auditLogRepo)
+
+	// Initialize Handlers
+	handler.InitUserHandler(userService)
+	handler.InitAccountHandler(accountService)
+	handler.InitTransactionHandler(transactionService)
 	handler.InitAuditLogHandler(auditLogService)
 
+	// User Routes
 	userGroup := r.Group("/users")
 	{
 		userGroup.POST("/", handler.CreateUser)
@@ -34,49 +35,43 @@ func SetupRoutes(r *gin.Engine) {
 		userGroup.GET("/:email", handler.GetUserByEmail)
 		userGroup.PUT("/:email", handler.UpdateUser)
 		userGroup.GET("/:email/accounts", handler.GetAccountsByEmail)
-		userGroup.GET("/:email/accounts/:accountID", handler.GetAccountById)
 		userGroup.POST("/:email/accounts", handler.CreateAccount)
+		userGroup.GET("/:email/accounts/:accountID", handler.GetAccountById)
+		userGroup.PUT("/:email/accounts/:accountID", handler.UpdateAccount)
 	}
 
+	// Account Routes
 	accountGroup := r.Group("/accounts")
 	{
+		accountGroup.POST("/:email", handler.CreateAccount)
 		accountGroup.GET("/:email", handler.GetAccountsByEmail)
 		accountGroup.GET("/:email/:accountID", handler.GetAccountById)
-		accountGroup.GET("/:email/:accountID/transactions/inbound", func(c *gin.Context) {
-			c.Set("transaction_type", "inbound")
-			handler.GetTransactions(c)
-		})
-		accountGroup.GET("/:email/:accountID/transactions/outbound", func(c *gin.Context) {
-			c.Set("transaction_type", "outbound")
-			handler.GetTransactions(c)
-		})
-		accountGroup.GET("/:email/:accountID/transactions", func(c *gin.Context) {
-			c.Set("transaction_type", "")
-			handler.GetTransactions(c)
-		})
+		accountGroup.GET("/:email/:accountID/transactions", setTransactionType("", handler.GetTransactions))
+		accountGroup.GET("/:email/:accountID/transactions/inbound", setTransactionType("inbound", handler.GetTransactions))
+		accountGroup.GET("/:email/:accountID/transactions/outbound", setTransactionType("outbound", handler.GetTransactions))
 	}
 
+	// Transaction Routes
 	transactionGroup := r.Group("/transactions")
 	{
 		transactionGroup.POST("/:email/:accountID", handler.CreateTransaction)
-		transactionGroup.GET("/:email/:accountID/inbound", func(c *gin.Context) {
-			c.Set("transaction_type", "inbound")
-			handler.GetTransactions(c)
-		})
-		transactionGroup.GET("/:email/:accountID/outbound", func(c *gin.Context) {
-			c.Set("transaction_type", "outbound")
-			handler.GetTransactions(c)
-		})
-		transactionGroup.GET("/:email/:accountID", func(c *gin.Context) {
-			c.Set("transaction_type", "")
-			handler.GetTransactions(c)
-		})
+		transactionGroup.GET("/:email/:accountID/inbound", setTransactionType("inbound", handler.GetTransactions))
+		transactionGroup.GET("/:email/:accountID/outbound", setTransactionType("outbound", handler.GetTransactions))
+		transactionGroup.GET("/:email/:accountID", setTransactionType("", handler.GetTransactions))
 	}
 
+	// Audit Log Routes
 	auditLogGroup := r.Group("/auditlogs")
 	{
 		auditLogGroup.GET("/", handler.GetAllAuditLogs)
 		auditLogGroup.GET("/:email", handler.GetAuditLogsByEmail)
 	}
+}
 
+// Middleware to set transaction type in context
+func setTransactionType(transactionType string, handlerFunc gin.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		c.Set("transaction_type", transactionType)
+		handlerFunc(c)
+	}
 }

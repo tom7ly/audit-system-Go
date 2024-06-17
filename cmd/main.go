@@ -2,32 +2,41 @@ package main
 
 import (
 	"audit-system/internal/database"
-	"audit-system/internal/middleware"
+	"audit-system/internal/repository"
 	"audit-system/internal/router"
+	"context"
 	"log"
-	"os"
-	"os/signal"
-	"syscall"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	// Initialize database connection
 	database.Init()
 	defer database.Close()
 
+	// Initialize repositories
+	auditLogRepo := repository.NewAuditLogRepository(database.Client)
+
+	// Schedule the cleanup job
+	go scheduleAuditLogCleanup(auditLogRepo, 10*time.Minute, 1*time.Minute)
+
+	// Initialize the router and set up routes
 	r := gin.Default()
-	r.Use(middleware.UserMiddleware())
+	router.SetupRoutes(r, auditLogRepo)
+	r.Run() // Start the server
+}
 
-	router.SetupRoutes(r)
-	go func() {
-		if err := r.Run(":8080"); err != nil {
-			log.Fatalf("failed to run server: %v", err)
+func scheduleAuditLogCleanup(repo *repository.AuditLogRepository, ttl, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for range ticker.C {
+		err := repo.DeleteOldAuditLogs(context.Background(), ttl)
+		if err != nil {
+			log.Printf("Failed to delete old audit logs: %v", err)
+		} else {
+			log.Println("Old audit logs deleted successfully")
 		}
-	}()
-
-	quit := make(chan os.Signal, 1)
-	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
-	<-quit
-	log.Println("Shutting down server...")
+	}
 }
