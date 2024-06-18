@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3" // Import the SQLite driver
+	_ "github.com/lib/pq"
 )
 
 type DBService struct {
@@ -21,6 +21,8 @@ type DBService struct {
 var dbServiceInstance *DBService
 var once sync.Once
 
+const defaultDSN = "host=localhost port=5432 user=pq password=pq dbname=audit sslmode=disable"
+
 // GetDBService returns a singleton instance of DBService
 func GetDBService() *DBService {
 	once.Do(func() {
@@ -30,14 +32,21 @@ func GetDBService() *DBService {
 }
 
 // Init initializes the database connection and sets up the schema
-func (s *DBService) Init() {
+func (s *DBService) Init(dsn ...string) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	var usedDSN string
+	if len(dsn) > 0 && dsn[0] != "" {
+		usedDSN = dsn[0]
+	} else {
+		usedDSN = defaultDSN
+	}
+
 	var err error
-	s.client, err = ent.Open("sqlite3", "file:mydatabase.db?_fk=1")
+	s.client, err = ent.Open("postgres", usedDSN)
 	if err != nil {
-		log.Fatalf("failed opening connection to sqlite: %v", err)
+		log.Fatalf("failed opening connection to postgres: %v", err)
 	}
 
 	// Register the audit log hook
@@ -64,10 +73,11 @@ func (s *DBService) Close() {
 		s.client.Close()
 	}
 }
+
 func AuditLogHook() ent.Hook {
-	auditlogService := GetContainer().AuditLogService
 	return func(next ent.Mutator) ent.Mutator {
 		return ent.MutateFunc(func(ctx context.Context, mutation ent.Mutation) (ent.Value, error) {
+			auditlogService := GetContainer().AuditLogService
 			if ctx.Value(utils.AuditContextKey) == true {
 				ctx = context.Background()
 				return next.Mutate(ctx, mutation)

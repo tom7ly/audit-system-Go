@@ -4,5 +4,5 @@ type User struct {
 	Email    string    `json:"email"`
 	Name     string    `json:"name"`
 	Age      int       `json:"age"`
-	Accounts []Account `json:"accounts,omitempty"` // Add accounts field
+	Accounts []Account `json:"accounts,omitempty"`
 }

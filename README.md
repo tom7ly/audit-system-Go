@@ -5,10 +5,40 @@ This documentation outlines the API endpoints, how audit logging works, and the 
 
 Each auditlog has TTL of 10 miniutes, and using a Goroutine we implement a cleanup job that dumps those logs with a cutoff if they lived longer than 1 miniutes.
 
+
+   <img src="diagram-export-6-19-2024-1_56_18-AM.png" alt="Dashboard Screenshot" width="300"/>
+
 ## Atomicity
 While a single operation using **ent** may be atomic, we sometime execute multiple operations in succcession.
 To make sure those operations are still happening "atomically", were using withTx function that utilizes **ent.Tx** transaction API, to execute transactional operations.
 
+## NOTE 
+**The /cmd/main_test/ isnt complete, and some of the deletion tests are currently inaccurate**
+## Installation Instructions
+
+### Prerequisites
+
+- Ensure you have Docker and Docker Compose installed on your system.
+- Ensure you have Bash installed
+
+### Setup Script
+
+The `setup.sh` script automates the setup process for the Audit System project. It performs the following tasks:
+
+1. **Install and start a PostgreSQL container**:
+   - Pulls the latest PostgreSQL image from Docker Hub.
+   - Runs a PostgreSQL container with specified environment variables (e.g., user, password, and database name).
+
+2. **Install Go**:
+   - Downloads and installs Go 1.22.4.
+   - Sets up the necessary environment variables for Go.
+
+3. **Generate Ent schema and build the project**:
+   - Generates Ent schema for database interaction.
+   - Builds the Go project.
+
+4. **Run the Audit System service**:
+   - Starts the Audit System service
 
 ## Overall Design
 
@@ -46,12 +76,14 @@ To make sure those operations are still happening "atomically", were using withT
   - `POST /users/:email/accounts`
   - `GET /users/:email/accounts/:accountID`
   - `PUT /users/:email/accounts/:accountID`
+  - `DELETE /users/:email/accounts/:accountID`
   - `POST /accounts/:email`
   - `GET /accounts/:email`
   - `GET /accounts/:email/:accountID`
+  - `DELETE /accounts/:email/:accountID
   - `GET /accounts/:email/:accountID/transactions`
   - `GET /accounts/:email/:accountID/transactions/inbound`
-  - `GET /accounts/:email/:accountID/transactions/outbound
+  - `GET /accounts/:email/:accountID/transactions/outbound`
   - `POST /transactions/:email/:accountID`
   - `GET /transactions/:email/:accountID/inbound`
   - `GET /transactions/:email/:accountID/outbound`

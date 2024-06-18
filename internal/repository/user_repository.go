@@ -85,13 +85,11 @@ func (r *UserRepository) DeleteUser(ctx context.Context, email string) error {
 			return fmt.Errorf("failed to find user: %w", err)
 		}
 
-		// Delete all accounts associated with the user
 		_, err = tx.Account.Delete().Where(account.HasUserWith(user.EmailEQ(email))).Exec(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to delete accounts for user: %w", err)
 		}
 
-		// Delete the user
 		err = tx.User.DeleteOne(userEntity).Exec(ctx)
 		if err != nil {
 			return fmt.Errorf("failed to delete user: %w", err)

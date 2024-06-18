@@ -1,35 +1,52 @@
 package main
 
 import (
-	"audit-system/internal/database"
 	"audit-system/internal/model"
-	"audit-system/internal/repository"
 	"audit-system/internal/service"
 	"context"
+	"database/sql"
 	"log"
+	"os"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 )
 
-var userService *service.UserService
-var accountService *service.AccountService
-var transactionService *service.TransactionService
-var auditLogService *service.AuditLogService
+var container *service.Container
 
-func initializeServices() {
-	database.Init()
+func initializeTestContainer() {
+	container = service.GetTestContainer("host=localhost port=5433 user=test_pq password=test_pq dbname=test_audit sslmode=disable")
+}
 
-	userRepo := repository.NewUserRepository(database.Client)
-	accountRepo := repository.NewAccountRepository(database.Client)
-	transactionRepo := repository.NewTransactionRepository(database.Client)
-	auditLogRepo := repository.NewAuditLogRepository(database.Client)
+func dropTestDatabase() {
+	dsn := "host=localhost port=5433 user=pq password=pq dbname=postgres sslmode=disable"
 
-	userService = service.NewUserService(userRepo, accountRepo)
-	accountService = service.NewAccountService(accountRepo)
-	transactionService = service.NewTransactionService(transactionRepo)
-	auditLogService = service.NewAuditLogService(auditLogRepo)
+	db, err := sql.Open("postgres", dsn)
+	if err != nil {
+		log.Fatalf("failed to connect to postgres: %v", err)
+	}
+	defer db.Close()
+
+	_, err = db.Exec(`SELECT pg_terminate_backend(pg_stat_activity.pid)
+		FROM pg_stat_activity
+		WHERE pg_stat_activity.datname = 'test_audit'
+		  AND pid <> pg_backend_pid();`)
+	if err != nil {
+		log.Fatalf("failed to terminate existing connections: %v", err)
+	}
+
+	_, err = db.Exec("DROP DATABASE IF EXISTS test_audit")
+	if err != nil {
+		log.Fatalf("failed to drop test database: %v", err)
+	}
+}
+
+func cleanupTestDatabase() {
+	if container != nil {
+		container.Shutdown()
+	}
+	dropTestDatabase()
 }
 
 func createUser(ctx context.Context, email, name string, age int) (*model.User, error) {
@@ -39,7 +56,7 @@ func createUser(ctx context.Context, email, name string, age int) (*model.User, 
 		Name:  name,
 		Age:   age,
 	}
-	createdUser, err := userService.CreateUser(ctx, user)
+	createdUser, err := container.UserService.CreateUser(ctx, user)
 	if err != nil {
 		return nil, err
 	}
@@ -49,7 +66,7 @@ func createUser(ctx context.Context, email, name string, age int) (*model.User, 
 
 func getUsers(ctx context.Context) ([]model.User, error) {
 	log.Println("Getting all users...")
-	users, err := userService.GetUsers(ctx)
+	users, err := container.UserService.GetUsers(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -59,7 +76,7 @@ func getUsers(ctx context.Context) ([]model.User, error) {
 
 func getUserByEmail(ctx context.Context, email string) (*model.User, error) {
 	log.Printf("Getting user by email %s...\n", email)
-	user, err := userService.GetUserByEmail(ctx, email)
+	user, err := container.UserService.GetUserByEmail(ctx, email)
 	if err != nil {
 		return nil, err
 	}
@@ -74,7 +91,7 @@ func updateUser(ctx context.Context, email, name string, age int) (*model.User, 
 		Name:  name,
 		Age:   age,
 	}
-	updatedUser, err := userService.UpdateUser(ctx, email, user)
+	updatedUser, err := container.UserService.UpdateUser(ctx, email, user)
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +105,7 @@ func createAccount(ctx context.Context, email string, balance float64) (*model.A
 		Balance:          balance,
 		LastTransferTime: time.Now(),
 	}
-	createdAccount, err := accountService.CreateAccount(ctx, account, email)
+	createdAccount, err := container.AccountService.CreateAccount(ctx, account, email)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +115,7 @@ func createAccount(ctx context.Context, email string, balance float64) (*model.A
 
 func createTransaction(ctx context.Context, email string, fromAccountID, toAccountID int, amount float64) error {
 	log.Printf("Creating transaction from account %d to account %d...\n", fromAccountID, toAccountID)
-	err := transactionService.CreateTransaction(ctx, email, fromAccountID, toAccountID, amount)
+	err := container.TransactionService.CreateTransaction(ctx, email, fromAccountID, toAccountID, amount)
 	if err != nil {
 		return err
 	}
@@ -107,7 +124,7 @@ func createTransaction(ctx context.Context, email string, fromAccountID, toAccou
 }
 
 func verifyBalances(ctx context.Context, t *testing.T, email string, accountID int, expectedBalance float64) {
-	updatedAccount, err := accountService.GetAccountByID(ctx, email, accountID)
+	updatedAccount, err := container.AccountService.GetAccountByID(ctx, email, accountID)
 	assert.NoError(t, err, "failed to get updated account for user")
 	assert.Equal(t, expectedBalance, updatedAccount.Balance, "balance of user's account should be updated")
 	log.Printf("Updated Account for user %s: %+v\n", email, updatedAccount)
@@ -115,57 +132,37 @@ func verifyBalances(ctx context.Context, t *testing.T, email string, accountID i
 
 func deleteAccount(ctx context.Context, t *testing.T, email string, accountID int) {
 	log.Printf("Deleting account %d for user %s...\n", accountID, email)
-	err := accountService.DeleteAccount(ctx, accountID)
+	err := container.AccountService.DeleteAccount(ctx, accountID)
 	assert.NoError(t, err, "failed to delete account")
 	log.Printf("Account %d deleted successfully.\n", accountID)
 
-	deletedAccount, err := accountService.GetAccountByID(ctx, email, accountID)
+	deletedAccount, err := container.AccountService.GetAccountByID(ctx, email, accountID)
 	assert.Error(t, err, "should not be able to fetch deleted account")
 	assert.Nil(t, deletedAccount, "deleted account should be nil")
 }
 
 func deleteUser(ctx context.Context, t *testing.T, email string) {
 	log.Printf("Deleting user %s...\n", email)
-	err := userService.DeleteUser(ctx, email)
+	err := container.UserService.DeleteUser(ctx, email)
 	assert.NoError(t, err, "failed to delete user")
 	log.Printf("User %s deleted successfully.\n", email)
 
-	_, err = userService.GetUserByEmail(ctx, email)
+	_, err = container.UserService.GetUserByEmail(ctx, email)
 	assert.Error(t, err, "should not be able to fetch deleted user")
 }
 
-func getAuditLogs(ctx context.Context) ([]model.AuditLog, error) {
+func getAuditLogs(ctx context.Context) ([]*model.AuditLog, error) {
 	log.Println("Getting all audit logs...")
-	auditLogs, err := auditLogService.GetAllAuditLogs(ctx)
+	auditLogs, err := container.AuditLogService.GetAllAuditLogs(ctx)
 	if err != nil {
 		return nil, err
 	}
 	log.Printf("All audit logs: %+v\n", auditLogs)
-	auditLogsModel := make([]model.AuditLog, len(auditLogs))
-	for i, log := range auditLogs {
-		/**
-		ClientID  string                 `json:"client_id"`
-			Timestamp time.Time              `json:"timestamp"`
-			Entity    string                 `json:"entity"`
-			Mutation  string                 `json:"mutation"`
-			Before    map[string]interface{} `json:"before"`
-			After     map[string]interface{} `json:"after"`
-
-		*/
-		auditLogsModel[i] = model.AuditLog{
-			ClientID:  log.ClientID,
-			Timestamp: log.Timestamp,
-			Entity:    log.Entity,
-			Mutation:  log.Mutation,
-			Before:    log.Before,
-			After:     log.After,
-		}
-	}
-	return auditLogsModel, nil
+	return auditLogs, nil
 }
 
 func TestBankingSystem(t *testing.T) {
-	initializeServices()
+	initializeTestContainer()
 	ctx := context.Background()
 
 	user1, err := createUser(ctx, "user1@example.com", "User One", 30)
@@ -192,7 +189,7 @@ func TestBankingSystem(t *testing.T) {
 }
 
 func TestCreateAndDeleteUser(t *testing.T) {
-	initializeServices()
+	initializeTestContainer()
 	ctx := context.Background()
 
 	user, err := createUser(ctx, "testuser@example.com", "Test User", 20)
@@ -202,7 +199,7 @@ func TestCreateAndDeleteUser(t *testing.T) {
 }
 
 func TestCreateAndDeleteAccount(t *testing.T) {
-	initializeServices()
+	initializeTestContainer()
 	ctx := context.Background()
 
 	user, err := createUser(ctx, "testaccountuser@example.com", "Test Account User", 40)
@@ -217,7 +214,7 @@ func TestCreateAndDeleteAccount(t *testing.T) {
 }
 
 func TestTransactionBetweenAccounts(t *testing.T) {
-	initializeServices()
+	initializeTestContainer()
 	ctx := context.Background()
 
 	user1, err := createUser(ctx, "transactionuser1@example.com", "Transaction User One", 35)
@@ -244,7 +241,7 @@ func TestTransactionBetweenAccounts(t *testing.T) {
 }
 
 func TestCreateMultipleUsersAndAccounts(t *testing.T) {
-	initializeServices()
+	initializeTestContainer()
 	ctx := context.Background()
 
 	user1, err := createUser(ctx, "multiuser1@example.com", "Multi User One", 30)
@@ -276,7 +273,7 @@ func TestCreateMultipleUsersAndAccounts(t *testing.T) {
 }
 
 func TestUpdateUserDetails(t *testing.T) {
-	initializeServices()
+	initializeTestContainer()
 	ctx := context.Background()
 
 	user, err := createUser(ctx, "updateuser@example.com", "Update User", 30)
@@ -296,7 +293,7 @@ func TestUpdateUserDetails(t *testing.T) {
 }
 
 func TestGetAllUsers(t *testing.T) {
-	initializeServices()
+	initializeTestContainer()
 	ctx := context.Background()
 
 	user1, err := createUser(ctx, "getalluser1@example.com", "Get All User One", 25)
@@ -314,7 +311,7 @@ func TestGetAllUsers(t *testing.T) {
 }
 
 func TestAuditLogs(t *testing.T) {
-	initializeServices()
+	initializeTestContainer()
 	ctx := context.Background()
 
 	// Create a user to generate an audit log
@@ -338,13 +335,9 @@ func TestAuditLogs(t *testing.T) {
 	deleteUser(ctx, t, user.Email)
 }
 
-func TestMain(t *testing.T) {
-	t.Run("TestCreateAndDeleteUser", TestCreateAndDeleteUser)
-	t.Run("TestCreateAndDeleteAccount", TestCreateAndDeleteAccount)
-	t.Run("TestTransactionBetweenAccounts", TestTransactionBetweenAccounts)
-	t.Run("TestCreateMultipleUsersAndAccounts", TestCreateMultipleUsersAndAccounts)
-	t.Run("TestUpdateUserDetails", TestUpdateUserDetails)
-	t.Run("TestGetAllUsers", TestGetAllUsers)
-	t.Run("TestAuditLogs", TestAuditLogs)
-	t.Run("TestBankingSystem", TestBankingSystem)
+func TestMain(m *testing.M) {
+	initializeTestContainer()
+	code := m.Run()
+	cleanupTestDatabase()
+	os.Exit(code)
 }

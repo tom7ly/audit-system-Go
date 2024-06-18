@@ -11,27 +11,21 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-var container = *service.GetContainer()
-
 func main() {
-	// Initialize database connection
+	var container = service.GetContainer()
+	go scheduleAuditLogCleanup(container, 1*time.Minute, 30*time.Second)
 
-	// Schedule the cleanup job
-	go scheduleAuditLogCleanup(1*time.Minute, 30*time.Second)
-
-	// Initialize the router and set up routes
 	r := gin.Default()
 	router.SetupRoutes(r)
-	r.Run() // Start the server
+	r.Run()
 }
+func scheduleAuditLogCleanup(container *service.Container, ttl, interval time.Duration) {
 
-func scheduleAuditLogCleanup(ttl, interval time.Duration) {
-	repo := container.AuditLogRepository
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
 		ctx := context.WithValue(context.Background(), utils.AuditContextKey, true)
-		deletes, err := repo.DeleteOldAuditLogs(ctx, ttl)
+		deletes, err := container.AuditLogService.DeleteOldAuditLogs(ctx, ttl)
 		if err != nil {
 			log.Printf("Failed to delete old audit logs: %v", err)
 		} else if deletes > 0 {

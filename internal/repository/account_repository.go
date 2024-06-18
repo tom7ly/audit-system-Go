@@ -147,7 +147,6 @@ func mapAccounts(accounts []*ent.Account) []model.Account {
 }
 
 func mapAccount(a *ent.Account) *model.Account {
-	// Map transactions
 	outgoingTransactions := make([]model.Transaction, len(a.Edges.OutgoingTransactions))
 	for i, t := range a.Edges.OutgoingTransactions {
 		outgoingTransactions[i] = model.Transaction{

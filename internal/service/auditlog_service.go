@@ -4,6 +4,7 @@ import (
 	"audit-system/internal/model"
 	"audit-system/internal/repository"
 	"context"
+	"time"
 )
 
 type AuditLogService struct {
@@ -24,4 +25,8 @@ func (s *AuditLogService) GetAllAuditLogs(ctx context.Context) ([]*model.AuditLo
 
 func (s *AuditLogService) GetAuditLogsByEmail(ctx context.Context, email string) ([]*model.AuditLog, error) {
 	return s.repo.GetAuditLogsByEmail(ctx, email)
+}
+
+func (s *AuditLogService) DeleteOldAuditLogs(ctx context.Context, ttl time.Duration) (int, error) {
+	return s.repo.DeleteOldAuditLogs(ctx, ttl)
 }
