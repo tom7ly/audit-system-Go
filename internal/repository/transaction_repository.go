@@ -6,6 +6,7 @@ import (
 	"audit-system/ent/transaction"
 	"audit-system/ent/user"
 	"audit-system/internal/model"
+	"audit-system/internal/utils"
 	"context"
 	"fmt"
 	"time"
@@ -15,12 +16,12 @@ type TransactionRepository struct {
 	client *ent.Client
 }
 
-func NewTransactionRepository(client *ent.Client) *TransactionRepository {
+func NewTransactionRepository(client *ent.Client, q *utils.Queue) *TransactionRepository {
 	return &TransactionRepository{client: client}
 }
 
 func (r *TransactionRepository) CreateTransaction(ctx context.Context, email string, fromAccountID int, toAccountID int, amount float64) error {
-	return withTx(r.client, ctx, func(tx *ent.Tx) error {
+	return utils.WithTx(r.client, ctx, func(tx *ent.Tx) error {
 		fromAccount, err := tx.Account.Query().
 			Where(account.IDEQ(fromAccountID), account.HasUserWith(user.EmailEQ(email))).
 			Only(ctx)
@@ -34,11 +35,11 @@ func (r *TransactionRepository) CreateTransaction(ctx context.Context, email str
 		}
 
 		// Update balances and last transfer times
-		fromAccountUpdate := tx.Account.UpdateOneID(fromAccountID).
+		fromAccountUpdate := tx.Account.UpdateOne(fromAccount).
 			AddBalance(-amount).
 			SetLastTransferTime(time.Now())
 
-		toAccountUpdate := tx.Account.UpdateOneID(toAccountID).
+		toAccountUpdate := tx.Account.UpdateOne(toAccount).
 			AddBalance(amount).
 			SetLastTransferTime(time.Now())
 

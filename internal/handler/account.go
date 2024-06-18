@@ -39,18 +39,18 @@ func CreateAccount(c *gin.Context) {
 		Balance:          req.Balance,
 		LastTransferTime: time.Now(),
 	}
-
-	if err := accountService.CreateAccount(c.Request.Context(), account, email); err != nil {
+	createdAccount, err := accountService.CreateAccount(c.Request.Context(), account, email)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, account)
+	c.JSON(http.StatusOK, createdAccount)
 }
 
 func GetAccountsByEmail(c *gin.Context) {
 	var uri AccountUriRequest
 	if err := c.ShouldBindUri(&uri); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		handleRequestParsingError(c, err)
 		return
 	}
 
@@ -91,15 +91,28 @@ func UpdateAccount(c *gin.Context) {
 		return
 	}
 
-	var updatedAccount model.Account
-	if err := c.ShouldBindJSON(&updatedAccount); err != nil {
+	var account model.Account
+	if err := c.ShouldBindJSON(&account); err != nil {
 		handleRequestParsingError(c, err)
 		return
 	}
-
-	if err := accountService.UpdateAccount(c.Request.Context(), email, accountID, updatedAccount); err != nil {
+	updatedAccount, err := accountService.GetAccountByID(c.Request.Context(), email, accountID)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, gin.H{"status": "account updated successfully"})
+
+	c.JSON(http.StatusOK, updatedAccount)
+}
+func DeleteAccount(c *gin.Context) {
+	accountID, err := strconv.Atoi(c.Param("accountID"))
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid account ID"})
+		return
+	}
+	if err := accountService.DeleteAccount(c.Request.Context(), accountID); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Account deleted successfully"})
 }

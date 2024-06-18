@@ -1,9 +1,9 @@
 package main
 
 import (
-	"audit-system/internal/database"
-	"audit-system/internal/repository"
 	"audit-system/internal/router"
+	"audit-system/internal/service"
+	"audit-system/internal/utils"
 	"context"
 	"log"
 	"time"
@@ -11,32 +11,33 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+var container = *service.GetContainer()
+
 func main() {
 	// Initialize database connection
-	database.Init()
-	defer database.Close()
-
-	// Initialize repositories
-	auditLogRepo := repository.NewAuditLogRepository(database.Client)
 
 	// Schedule the cleanup job
-	go scheduleAuditLogCleanup(auditLogRepo, 10*time.Minute, 1*time.Minute)
+	go scheduleAuditLogCleanup(1*time.Minute, 30*time.Second)
 
 	// Initialize the router and set up routes
 	r := gin.Default()
-	router.SetupRoutes(r, auditLogRepo)
+	router.SetupRoutes(r)
 	r.Run() // Start the server
 }
 
-func scheduleAuditLogCleanup(repo *repository.AuditLogRepository, ttl, interval time.Duration) {
+func scheduleAuditLogCleanup(ttl, interval time.Duration) {
+	repo := container.AuditLogRepository
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for range ticker.C {
-		err := repo.DeleteOldAuditLogs(context.Background(), ttl)
+		ctx := context.WithValue(context.Background(), utils.AuditContextKey, true)
+		deletes, err := repo.DeleteOldAuditLogs(ctx, ttl)
 		if err != nil {
 			log.Printf("Failed to delete old audit logs: %v", err)
+		} else if deletes > 0 {
+			log.Println("Deleted", deletes, "old audit logs")
 		} else {
-			log.Println("Old audit logs deleted successfully")
+			log.Println("No old audit logs to delete")
 		}
 	}
 }

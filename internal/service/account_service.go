@@ -10,11 +10,11 @@ type AccountService struct {
 	repo *repository.AccountRepository
 }
 
-func NewAccountService(repo *repository.AccountRepository) *AccountService {
+func newAccountService(repo *repository.AccountRepository) *AccountService {
 	return &AccountService{repo: repo}
 }
 
-func (s *AccountService) CreateAccount(ctx context.Context, account model.Account, userEmail string) error {
+func (s *AccountService) CreateAccount(ctx context.Context, account model.Account, userEmail string) (*model.Account, error) {
 	return s.repo.CreateAccount(ctx, account, userEmail)
 }
 
@@ -30,4 +30,7 @@ func (s *AccountService) GetAccountWithTransactions(ctx context.Context, email s
 
 func (s *AccountService) UpdateAccount(ctx context.Context, email string, accountID int, updatedAccount model.Account) error {
 	return s.repo.UpdateAccount(ctx, email, accountID, updatedAccount)
+}
+func (s *AccountService) DeleteAccount(ctx context.Context, accountID int) error {
+	return s.repo.DeleteAccount(ctx, accountID)
 }

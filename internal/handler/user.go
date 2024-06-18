@@ -17,14 +17,15 @@ func InitUserHandler(us *service.UserService) {
 func CreateUser(c *gin.Context) {
 	var user model.User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		handleRequestParsingError(c, err)
 		return
 	}
-	if err := userService.CreateUser(c.Request.Context(), user); err != nil {
+	createdUser, err := userService.CreateUser(c.Request.Context(), user)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+	c.JSON(http.StatusOK, createdUser)
 }
 
 func GetUsers(c *gin.Context) {
@@ -50,12 +51,22 @@ func UpdateUser(c *gin.Context) {
 	email := c.Param("email")
 	var user model.User
 	if err := c.ShouldBindJSON(&user); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		handleRequestParsingError(c, err)
 		return
 	}
-	if err := userService.UpdateUser(c.Request.Context(), email, user); err != nil {
+	updatedUser, err := userService.UpdateUser(c.Request.Context(), email, user)
+	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		return
 	}
-	c.JSON(http.StatusOK, user)
+
+	c.JSON(http.StatusOK, updatedUser)
+}
+func DeleteUser(c *gin.Context) {
+	email := c.Param("email")
+	if err := userService.DeleteUser(c.Request.Context(), email); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "User deleted successfully"})
 }

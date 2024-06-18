@@ -30,7 +30,7 @@ func CreateTransaction(c *gin.Context) {
 
 	var req CreateTransactionRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		handleRequestParsingError(c, err)
 		return
 	}
 

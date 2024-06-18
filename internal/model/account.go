@@ -8,5 +8,4 @@ type Account struct {
 	LastTransferTime     time.Time     `json:"last_transfer_time"`
 	OutgoingTransactions []Transaction `json:"outgoing_transactions,omitempty"`
 	IncomingTransactions []Transaction `json:"incoming_transactions,omitempty"`
-	UserEmail            string        `json:"user_email,omitempty"`
 }

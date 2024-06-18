@@ -5,32 +5,53 @@ import (
 	"audit-system/ent/account"
 	"audit-system/ent/user"
 	"audit-system/internal/model"
+	"audit-system/internal/utils"
 	"context"
+	"fmt"
 )
 
 type AccountRepository struct {
 	client *ent.Client
 }
 
-func NewAccountRepository(client *ent.Client) *AccountRepository {
+func NewAccountRepository(client *ent.Client, q *utils.Queue) *AccountRepository {
 	return &AccountRepository{client: client}
 }
 
-func (r *AccountRepository) CreateAccount(ctx context.Context, account model.Account, userEmail string) error {
-	return withTx(r.client, ctx, func(tx *ent.Tx) error {
+func (r *AccountRepository) CreateAccount(ctx context.Context, newAccount model.Account, userEmail string) (*model.Account, error) {
+	var createdEntAccount *ent.Account
+	err := utils.WithTx(r.client, ctx, func(tx *ent.Tx) error {
 		userEntity, err := tx.User.Query().Where(user.EmailEQ(userEmail)).Only(ctx)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to find user: %w", err)
 		}
 
-		_, err = tx.Account.
+		createdEntAccount, err = tx.Account.
 			Create().
-			SetBalance(account.Balance).
-			SetLastTransferTime(account.LastTransferTime).
+			SetBalance(newAccount.Balance).
+			SetLastTransferTime(newAccount.LastTransferTime).
 			SetUser(userEntity).
 			Save(ctx)
-		return err
+		if err != nil {
+			return fmt.Errorf("failed to create account: %w", err)
+		}
+
+		// Reload the account with the edges to ensure the user edge is set
+		createdEntAccount, err = tx.Account.Query().
+			Where(account.IDEQ(createdEntAccount.ID)).
+			WithUser().
+			Only(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to reload account: %w", err)
+		}
+
+		return nil
 	})
+	if err != nil {
+		return nil, err
+	}
+
+	return mapAccount(createdEntAccount), nil
 }
 
 func (r *AccountRepository) GetAccountsByEmail(ctx context.Context, email string) ([]model.Account, error) {
@@ -85,7 +106,7 @@ func (r *AccountRepository) GetAccountWithTransactions(ctx context.Context, emai
 }
 
 func (r *AccountRepository) UpdateAccount(ctx context.Context, email string, accountID int, updatedAccount model.Account) error {
-	return withTx(r.client, ctx, func(tx *ent.Tx) error {
+	return utils.WithTx(r.client, ctx, func(tx *ent.Tx) error {
 		_, err := tx.User.Query().Where(user.EmailEQ(email)).Only(ctx)
 		if err != nil {
 			return err
@@ -99,6 +120,21 @@ func (r *AccountRepository) UpdateAccount(ctx context.Context, email string, acc
 			SetBalance(updatedAccount.Balance).
 			Save(ctx)
 		return err
+	})
+}
+func (r *AccountRepository) DeleteAccount(ctx context.Context, accountID int) error {
+	return utils.WithTx(r.client, ctx, func(tx *ent.Tx) error {
+		accountEntity, err := tx.Account.Get(ctx, accountID)
+		if err != nil {
+			return fmt.Errorf("failed to find account: %w", err)
+		}
+
+		err = tx.Account.DeleteOne(accountEntity).Exec(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to delete account: %w", err)
+		}
+
+		return nil
 	})
 }
 
@@ -138,7 +174,6 @@ func mapAccount(a *ent.Account) *model.Account {
 		ID:                   a.ID,
 		Balance:              a.Balance,
 		LastTransferTime:     a.LastTransferTime,
-		UserEmail:            a.Edges.User.Email,
 		OutgoingTransactions: outgoingTransactions,
 		IncomingTransactions: incomingTransactions,
 	}

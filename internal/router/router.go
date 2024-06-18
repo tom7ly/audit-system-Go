@@ -1,31 +1,20 @@
 package router
 
 import (
-	"audit-system/internal/database"
 	"audit-system/internal/handler"
-	"audit-system/internal/repository"
 	"audit-system/internal/service"
 
 	"github.com/gin-gonic/gin"
 )
 
-func SetupRoutes(r *gin.Engine, auditLogRepo *repository.AuditLogRepository) {
+func SetupRoutes(r *gin.Engine) {
 	// Initialize Repositories
-	userRepository := repository.NewUserRepository(database.Client)
-	accountRepository := repository.NewAccountRepository(database.Client)
-	transactionRepository := repository.NewTransactionRepository(database.Client)
-
-	// Initialize Services
-	userService := service.NewUserService(userRepository)
-	accountService := service.NewAccountService(accountRepository)
-	transactionService := service.NewTransactionService(transactionRepository)
-	auditLogService := service.NewAuditLogService(auditLogRepo)
-
+	container := service.GetContainer()
 	// Initialize Handlers
-	handler.InitUserHandler(userService)
-	handler.InitAccountHandler(accountService)
-	handler.InitTransactionHandler(transactionService)
-	handler.InitAuditLogHandler(auditLogService)
+	handler.InitUserHandler(container.UserService)
+	handler.InitAccountHandler(container.AccountService)
+	handler.InitTransactionHandler(container.TransactionService)
+	handler.InitAuditLogHandler(container.AuditLogService)
 
 	// User Routes
 	userGroup := r.Group("/users")
@@ -34,10 +23,12 @@ func SetupRoutes(r *gin.Engine, auditLogRepo *repository.AuditLogRepository) {
 		userGroup.GET("/", handler.GetUsers)
 		userGroup.GET("/:email", handler.GetUserByEmail)
 		userGroup.PUT("/:email", handler.UpdateUser)
+		userGroup.DELETE("/:email", handler.DeleteUser) // New endpoint to delete user
 		userGroup.GET("/:email/accounts", handler.GetAccountsByEmail)
 		userGroup.POST("/:email/accounts", handler.CreateAccount)
 		userGroup.GET("/:email/accounts/:accountID", handler.GetAccountById)
 		userGroup.PUT("/:email/accounts/:accountID", handler.UpdateAccount)
+		userGroup.DELETE("/:email/accounts/:accountID", handler.DeleteAccount) // New endpoint to delete account by user and account ID
 	}
 
 	// Account Routes
@@ -49,6 +40,7 @@ func SetupRoutes(r *gin.Engine, auditLogRepo *repository.AuditLogRepository) {
 		accountGroup.GET("/:email/:accountID/transactions", setTransactionType("", handler.GetTransactions))
 		accountGroup.GET("/:email/:accountID/transactions/inbound", setTransactionType("inbound", handler.GetTransactions))
 		accountGroup.GET("/:email/:accountID/transactions/outbound", setTransactionType("outbound", handler.GetTransactions))
+		accountGroup.DELETE("/:accountID", handler.DeleteAccount) // New endpoint to delete account by account ID only
 	}
 
 	// Transaction Routes
