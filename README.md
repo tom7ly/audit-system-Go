@@ -81,7 +81,7 @@ The `setup.sh` script automates the setup process for the Audit System project. 
   - `POST /accounts/:email`
   - `GET /accounts/:email`
   - `GET /accounts/:email/:accountID`
-  - `DELETE /accounts/:email/:accountID
+  - `DELETE /accounts/:email/:accountID`
   - `GET /accounts/:email/:accountID/transactions`
   - `GET /accounts/:email/:accountID/transactions/inbound`
   - `GET /accounts/:email/:accountID/transactions/outbound`
