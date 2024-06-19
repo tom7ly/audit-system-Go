@@ -1,6 +1,7 @@
 package main
 
 import (
+	"audit-system/internal/middleware"
 	"audit-system/internal/router"
 	"audit-system/internal/service"
 	"audit-system/internal/utils"
@@ -16,6 +17,7 @@ func main() {
 	go scheduleAuditLogCleanup(container, 1*time.Minute, 30*time.Second)
 
 	r := gin.Default()
+	r.Use(middleware.UserMiddleware())
 	router.SetupRoutes(r)
 	r.Run()
 }

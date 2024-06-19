@@ -68,6 +68,7 @@ The `setup.sh` script automates the setup process for the Audit System project. 
 
 
 # API Routes
+
   - `POST /users/`
   - `GET /users/`
   - `GET /users/:email`
@@ -92,6 +93,9 @@ The `setup.sh` script automates the setup process for the Audit System project. 
   - `GET /auditlogs/:email`
 
 ## Endpoints Documentation
+
+### Makesure that you provide clientID string in the Auth Bearer Token in the request
+
 ### User Endpoints
 - **Create User**
   - `POST /users/`
